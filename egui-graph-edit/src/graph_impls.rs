@@ -1,6 +1,9 @@
 use super::*;
 
-impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
+impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType>
+where
+    DataType: PartialEq,
+{
     pub fn new() -> Self {
         Self {
             nodes: SlotMap::default(),
@@ -53,18 +56,47 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
         input_id
     }
 
+    pub fn update_input_param(
+        &mut self,
+        input_id: InputId,
+        name: Option<String>,
+        typ: Option<DataType>,
+        value: Option<ValueType>,
+        kind: Option<InputParamKind>,
+        shown_inline: Option<bool>,
+    ) {
+        if let Some(input_param) = self.inputs.get_mut(input_id) {
+            if let Some(new_typ) = typ {
+                input_param.typ = new_typ;
+            }
+            if let Some(new_value) = value {
+                input_param.value = new_value;
+            }
+            if let Some(new_kind) = kind {
+                input_param.kind = new_kind;
+            }
+            if let Some(new_shown_inline) = shown_inline {
+                input_param.shown_inline = new_shown_inline;
+            }
+
+            if let Some(new_name) = name {
+                for (curr_name, id) in &mut self.nodes[input_param.node].inputs {
+                    if *id == input_id {
+                        *curr_name = new_name;
+                        break;
+                    }
+                }
+            }
+        }
+
+        self.ensure_connection_types(AnyParameterId::Input(input_id));
+    }
+
     pub fn remove_input_param(&mut self, param: InputId) {
         let node = self[param].node;
         self[node].inputs.retain(|(_, id)| *id != param);
         self.inputs.remove(param);
         self.connections.retain(|i, _| i != param);
-    }
-
-    pub fn remove_output_param(&mut self, param: OutputId) {
-        let node = self[param].node;
-        self[node].outputs.retain(|(_, id)| *id != param);
-        self.outputs.remove(param);
-        self.connections.retain(|_, o| *o != param);
     }
 
     pub fn add_output_param(&mut self, node_id: NodeId, name: String, typ: DataType) -> OutputId {
@@ -75,6 +107,63 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
         });
         self.nodes[node_id].outputs.push((name, output_id));
         output_id
+    }
+
+    pub fn update_output_param(
+        &mut self,
+        output_id: OutputId,
+        name: Option<String>,
+        typ: Option<DataType>,
+    ) {
+        if let Some(output_param) = self.outputs.get_mut(output_id) {
+            if let Some(new_typ) = typ {
+                output_param.typ = new_typ;
+            }
+
+            if let Some(new_name) = name {
+                for (curr_name, id) in &mut self.nodes[output_param.node].outputs {
+                    if *id == output_id {
+                        *curr_name = new_name;
+                        break;
+                    }
+                }
+            }
+        }
+
+        self.ensure_connection_types(AnyParameterId::Output(output_id));
+    }
+
+    pub fn remove_output_param(&mut self, param: OutputId) {
+        let node = self[param].node;
+        self[node].outputs.retain(|(_, id)| *id != param);
+        self.outputs.remove(param);
+        self.connections.retain(|_, o| *o != param);
+    }
+
+    /// Deletes mistyped connection made with param_id
+    ///
+    /// This is only needed connection param type is changed with means
+    /// other than [`Graph::update_input_param`].
+    pub fn ensure_connection_types(&mut self, param_id: AnyParameterId) {
+        let mut to_remove = Vec::default();
+
+        for (to_id, from_id) in self.iter_connections() {
+            // ignore connections that don't touch param_id.
+            if AnyParameterId::Input(to_id) != param_id
+                && AnyParameterId::Output(from_id) != param_id
+            {
+                continue;
+            }
+
+            // connection has mismatched types
+            if self.get_input(to_id).typ != self.get_output(from_id).typ {
+                to_remove.push(to_id);
+            }
+        }
+
+        for in_id in to_remove {
+            self.remove_connection(in_id);
+        }
     }
 
     /// Removes a node from the graph with given `node_id`. This also removes
@@ -154,21 +243,24 @@ impl<NodeData, DataType, ValueType> Graph<NodeData, DataType, ValueType> {
     }
 }
 
-impl<NodeData, DataType, ValueType> Default for Graph<NodeData, DataType, ValueType> {
+impl<NodeData, DataType, ValueType> Default for Graph<NodeData, DataType, ValueType>
+where
+    DataType: PartialEq,
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl<NodeData> Node<NodeData> {
-    pub fn inputs<'a, DataType, DataValue>(
+    pub fn inputs<'a, DataType: PartialEq, DataValue>(
         &'a self,
         graph: &'a Graph<NodeData, DataType, DataValue>,
     ) -> impl Iterator<Item = &InputParam<DataType, DataValue>> + 'a {
         self.input_ids().map(|id| graph.get_input(id))
     }
 
-    pub fn outputs<'a, DataType, DataValue>(
+    pub fn outputs<'a, DataType: PartialEq, DataValue>(
         &'a self,
         graph: &'a Graph<NodeData, DataType, DataValue>,
     ) -> impl Iterator<Item = &OutputParam<DataType>> + 'a {

@@ -35,7 +35,7 @@ pub struct GraphEditorState<NodeData, DataType, ValueType, NodeTemplate, UserSta
     pub _user_state: PhantomData<fn() -> UserState>,
 }
 
-impl<NodeData, DataType, ValueType, NodeKind, UserState>
+impl<NodeData, DataType: PartialEq, ValueType, NodeKind, UserState>
     GraphEditorState<NodeData, DataType, ValueType, NodeKind, UserState>
 {
     pub fn new(default_zoom: f32) -> Self {
@@ -48,7 +48,7 @@ impl<NodeData, DataType, ValueType, NodeKind, UserState>
         }
     }
 }
-impl<NodeData, DataType, ValueType, NodeKind, UserState> Default
+impl<NodeData, DataType: PartialEq, ValueType, NodeKind, UserState> Default
     for GraphEditorState<NodeData, DataType, ValueType, NodeKind, UserState>
 {
     fn default() -> Self {
