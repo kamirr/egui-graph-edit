@@ -1,0 +1,13 @@
+[package]
+name = "egui-graph-edit-example-simple"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.56"
+
+[dependencies]
+eframe = "0.30"
+egui-graph-edit = { path = "../egui-graph-edit" }
+anyhow = "1.0"
+
+[features]
+default = []
