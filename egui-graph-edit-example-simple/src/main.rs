@@ -7,6 +7,7 @@ mod app;
 use app::NodeGraphExampleSimple;
 
 fn main() {
+    // egui native app boilerplate:
     eframe::run_native(
         "Egui Graph Edit simple example",
         eframe::NativeOptions::default(),

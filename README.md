@@ -31,7 +31,7 @@ clicking anywhere on the screen will bring up the *node finder* menu.
 
 The [application code in the example](https://github.com/kamirr/egui-graph-edit/blob/main/egui-graph-edit-example/src/app.rs)
 is thoroughly commented and serves as a good introduction to embedding this
-library in your egui project.
+library in your egui project. There is additional, [simpler example](https://github.com/kamirr/egui-graph-edit/blob/main/egui-graph-edit-example-simple/src/app.rs).
 
 ## A note on API visibility
 Contrary to the general tendency in the Rust ecosytem, this library exposes all
