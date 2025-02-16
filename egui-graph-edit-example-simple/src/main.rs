@@ -10,11 +10,7 @@ fn main() {
     eframe::run_native(
         "Egui Graph Edit simple example",
         eframe::NativeOptions::default(),
-        Box::new(|_cc| {
-            Ok({
-                Box::<NodeGraphExampleSimple>::default()
-            })
-        }),
+        Box::new(|_cc| Ok(Box::<NodeGraphExampleSimple>::default())),
     )
     .expect("Failed to run native example");
 }

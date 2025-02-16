@@ -208,12 +208,7 @@ impl NodeGraphExampleSimple {
 
         let mut out = String::with_capacity(128);
 
-        fn printer(
-            out: &mut String,
-            nid: NodeId,
-            graph: &egui_graph_edit::Graph<DummyNodeData, DummyDataType, DummyValueType>,
-            db: &BTreeMap<NodeId, NodeInfo>,
-        ) {
+        fn printer(out: &mut String, nid: NodeId, db: &BTreeMap<NodeId, NodeInfo>) {
             let info = db.get(&nid).unwrap();
             if info.printed.get() {
                 out.push_str("...");
@@ -222,7 +217,7 @@ impl NodeGraphExampleSimple {
             info.printed.set(true);
             out.push_str("(node ");
             for input in &info.ins {
-                printer(out, *input, graph, db);
+                printer(out, *input, db);
             }
             out.push_str(") ");
             info.printed.set(true);
@@ -232,7 +227,7 @@ impl NodeGraphExampleSimple {
             if !info.leaf {
                 continue;
             }
-            printer(&mut out, *id, &self.state.graph, &nodes);
+            printer(&mut out, *id, &nodes);
         }
 
         out
