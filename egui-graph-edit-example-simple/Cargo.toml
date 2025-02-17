@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.56"
 
 [dependencies]
-eframe = "0.30"
+eframe = "0.31"
 egui-graph-edit = { path = "../egui-graph-edit" }
 anyhow = "1.0"
 
