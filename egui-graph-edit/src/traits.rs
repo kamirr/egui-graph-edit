@@ -214,7 +214,7 @@ impl CategoryTrait for () {
     }
 }
 
-impl<'a> CategoryTrait for &'a str {
+impl CategoryTrait for &str {
     fn name(&self) -> String {
         self.to_string()
     }

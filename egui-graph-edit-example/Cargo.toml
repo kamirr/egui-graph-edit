@@ -1,18 +1,18 @@
 [package]
-name = "egui-graph-edit-example"
-version = "0.1.0"
 authors = ["Kamil Koczurek <koczurekk@gmail.com>", "setzer22"]
 edition = "2021"
+name = "egui-graph-edit-example"
 rust-version = "1.56"
+version = "0.1.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-eframe = "0.30"
-egui-graph-edit = { path = "../egui-graph-edit" }
 anyhow = "1.0"
-serde = { version = "1.0", optional = true }
+eframe = "0.31"
+egui-graph-edit = {path = "../egui-graph-edit"}
+serde = {version = "1.0", optional = true}
 
 [features]
 default = []

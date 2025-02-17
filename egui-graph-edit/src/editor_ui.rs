@@ -375,6 +375,7 @@ where
                 2.0,
                 bg_color,
                 Stroke::new(3.0, stroke_color),
+                StrokeKind::Inside,
             );
 
             self.selected_nodes = node_rects
@@ -456,8 +457,8 @@ fn draw_connection(painter: &Painter, src_pos: Pos2, dst_pos: Pos2, color: Color
 #[derive(Clone, Copy, Debug)]
 struct OuterRectMemory(Rect);
 
-impl<'a, NodeData, DataType, ValueType, UserResponse, UserState>
-    GraphNodeWidget<'a, NodeData, DataType, ValueType>
+impl<NodeData, DataType, ValueType, UserResponse, UserState>
+    GraphNodeWidget<'_, NodeData, DataType, ValueType>
 where
     NodeData: NodeDataTrait<
         Response = UserResponse,
@@ -798,8 +799,8 @@ where
         // does not support drawing rectangles with asymmetrical round corners.
 
         let (shape, outline) = {
-            let rounding_radius = 4.0;
-            let rounding = Rounding::same(rounding_radius);
+            let rounding_radius = 4;
+            let corner_radius = CornerRadius::same(rounding_radius);
 
             let titlebar_height = title_height + margin.y;
             let titlebar_rect =
@@ -807,28 +808,30 @@ where
             let titlebar = Shape::Rect(RectShape {
                 blur_width: 0.0,
                 rect: titlebar_rect,
-                rounding,
+                corner_radius,
                 fill: self.graph[self.node_id]
                     .user_data
                     .titlebar_color(ui, self.node_id, self.graph, user_state)
                     .unwrap_or_else(|| background_color.lighten(0.8)),
                 stroke: Stroke::NONE,
-                fill_texture_id: Default::default(),
-                uv: Rect::ZERO,
+                stroke_kind: StrokeKind::Inside,
+                round_to_pixels: None,
+                brush: None,
             });
 
             let body_rect = Rect::from_min_size(
-                outer_rect.min + vec2(0.0, titlebar_height - rounding_radius),
+                outer_rect.min + vec2(0.0, titlebar_height - rounding_radius as f32),
                 vec2(outer_rect.width(), outer_rect.height() - titlebar_height),
             );
             let body = Shape::Rect(RectShape {
                 blur_width: 0.0,
                 rect: body_rect,
-                rounding: Rounding::ZERO,
+                corner_radius: CornerRadius::ZERO,
                 fill: background_color,
                 stroke: Stroke::NONE,
-                fill_texture_id: Default::default(),
-                uv: Rect::ZERO,
+                stroke_kind: StrokeKind::Inside,
+                round_to_pixels: None,
+                brush: None,
             });
 
             let bottom_body_rect = Rect::from_min_size(
@@ -838,11 +841,12 @@ where
             let bottom_body = Shape::Rect(RectShape {
                 blur_width: 0.0,
                 rect: bottom_body_rect,
-                rounding,
+                corner_radius,
                 fill: background_color,
                 stroke: Stroke::NONE,
-                fill_texture_id: Default::default(),
-                uv: Rect::ZERO,
+                stroke_kind: StrokeKind::Inside,
+                round_to_pixels: None,
+                brush: None,
             });
 
             let node_rect = titlebar_rect.union(body_rect).union(bottom_body_rect);
@@ -850,11 +854,12 @@ where
                 Shape::Rect(RectShape {
                     blur_width: 0.0,
                     rect: node_rect.expand(1.0),
-                    rounding,
+                    corner_radius,
                     fill: Color32::WHITE.lighten(0.8),
                     stroke: Stroke::NONE,
-                    fill_texture_id: Default::default(),
-                    uv: Rect::ZERO,
+                    stroke_kind: StrokeKind::Inside,
+                    round_to_pixels: None,
+                    brush: None,
                 })
             } else {
                 Shape::Noop
