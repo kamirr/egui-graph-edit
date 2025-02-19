@@ -61,6 +61,7 @@ pub struct GraphResponse<UserResponse: UserResponseTrait, NodeData: NodeDataTrai
     /// Is the mouse currently hovering the node finder?
     pub cursor_in_finder: bool,
 }
+
 impl<UserResponse: UserResponseTrait, NodeData: NodeDataTrait> Default
     for GraphResponse<UserResponse, NodeData>
 {
@@ -72,8 +73,10 @@ impl<UserResponse: UserResponseTrait, NodeData: NodeDataTrait> Default
         }
     }
 }
+
 pub struct GraphNodeWidget<'a, NodeData, DataType, ValueType> {
     pub position: &'a mut Pos2,
+    pub orientation: &'a mut NodeOrientation,
     pub graph: &'a mut Graph<NodeData, DataType, ValueType>,
     pub port_locations: &'a mut PortLocations,
     pub node_rects: &'a mut NodeRects,
@@ -157,6 +160,7 @@ where
         for node_id in self.node_order.iter().copied() {
             let responses = GraphNodeWidget {
                 position: self.node_positions.get_mut(node_id).unwrap(),
+                orientation: self.node_orientations.get_mut(node_id).unwrap(),
                 graph: &mut self.graph,
                 port_locations: &mut port_locations,
                 node_rects: &mut node_rects,
@@ -192,6 +196,8 @@ where
                         new_node,
                         cursor_pos - self.pan_zoom.pan - editor_rect.min.to_vec2(),
                     );
+                    self.node_orientations
+                        .insert(new_node, NodeOrientation::LeftToRight);
                     self.node_order.push(new_node);
 
                     should_close_node_finder = true;
@@ -211,6 +217,15 @@ where
         }
 
         /* Draw connections */
+        fn port_control(param_id: &AnyParameterId, orientation: NodeOrientation) -> Vec2 {
+            match (param_id, orientation) {
+                (AnyParameterId::Input(_), NodeOrientation::LeftToRight) => -Vec2::X,
+                (AnyParameterId::Input(_), NodeOrientation::RightToLeft) => Vec2::X,
+                (AnyParameterId::Output(_), NodeOrientation::LeftToRight) => Vec2::X,
+                (AnyParameterId::Output(_), NodeOrientation::RightToLeft) => -Vec2::X,
+            }
+        }
+
         if let Some((_, ref locator)) = self.connection_in_progress {
             let port_type = self.graph.any_param_type(*locator).unwrap();
             let connection_color = port_type.data_type_color(user_state);
@@ -229,8 +244,10 @@ where
                 port_type: &DataType,
                 ports: &SlotMap<Key, Value>,
                 port_locations: &PortLocations,
+                node_orientations: &SecondaryMap<NodeId, NodeOrientation>,
                 cursor_pos: Pos2,
-            ) -> Pos2 {
+                default_control: Vec2,
+            ) -> (Pos2, Vec2) {
                 ports
                     .iter()
                     .find_map(|(port_id, _)| {
@@ -242,7 +259,15 @@ where
                         if compatible_ports {
                             port_locations.get(&port_id.into()).and_then(|port_pos| {
                                 if port_pos.distance(cursor_pos) < DISTANCE_TO_CONNECT {
-                                    Some(*port_pos)
+                                    let param_id: AnyParameterId = port_id.into();
+                                    let dst_node_id = match param_id {
+                                        AnyParameterId::Output(id) => graph.get_output(id).node,
+                                        AnyParameterId::Input(id) => graph.get_input(id).node,
+                                    };
+                                    let dst_orientation = node_orientations[dst_node_id];
+                                    let dst_control = port_control(&param_id, dst_orientation);
+
+                                    Some((*port_pos, dst_control))
                                 } else {
                                     None
                                 }
@@ -251,32 +276,47 @@ where
                             None
                         }
                     })
-                    .unwrap_or(cursor_pos)
+                    .unwrap_or((cursor_pos, default_control))
             }
 
-            let (src_pos, dst_pos) = match locator {
-                AnyParameterId::Output(_) => (
-                    start_pos,
-                    snap_to_ports(
-                        &self.graph,
-                        port_type,
-                        &self.graph.inputs,
-                        &port_locations,
-                        cursor_pos,
-                    ),
+            // Figure out where source connection should point to
+            let src_node_id = match locator {
+                AnyParameterId::Output(out_id) => self.graph.get_output(*out_id).node,
+                AnyParameterId::Input(in_id) => self.graph.get_input(*in_id).node,
+            };
+            let src_orientation = self.node_orientations[src_node_id];
+            let src_control = port_control(locator, src_orientation);
+
+            // Figure out where destination connection should point to
+            let (dst_pos, dst_control) = match locator {
+                AnyParameterId::Output(_) => snap_to_ports(
+                    &self.graph,
+                    port_type,
+                    &self.graph.inputs,
+                    &port_locations,
+                    &self.node_orientations,
+                    cursor_pos,
+                    -src_control,
                 ),
-                AnyParameterId::Input(_) => (
-                    snap_to_ports(
-                        &self.graph,
-                        port_type,
-                        &self.graph.outputs,
-                        &port_locations,
-                        cursor_pos,
-                    ),
-                    start_pos,
+
+                AnyParameterId::Input(_) => snap_to_ports(
+                    &self.graph,
+                    port_type,
+                    &self.graph.outputs,
+                    &port_locations,
+                    &self.node_orientations,
+                    cursor_pos,
+                    -src_control,
                 ),
             };
-            draw_connection(ui.painter(), src_pos, dst_pos, connection_color);
+            draw_connection(
+                ui.painter(),
+                start_pos,
+                src_control,
+                dst_pos,
+                dst_control,
+                connection_color,
+            );
         }
 
         for (input, output) in self.graph.iter_connections() {
@@ -287,7 +327,20 @@ where
             let connection_color = port_type.data_type_color(user_state);
             let src_pos = port_locations[&AnyParameterId::Output(output)];
             let dst_pos = port_locations[&AnyParameterId::Input(input)];
-            draw_connection(ui.painter(), src_pos, dst_pos, connection_color);
+            let src_id = self.graph.get_output(output).node;
+            let dst_id = self.graph.get_input(input).node;
+            let src_orientation = self.node_orientations[src_id];
+            let dst_orientation = self.node_orientations[dst_id];
+            let src_control = port_control(&output.into(), src_orientation);
+            let dst_control = port_control(&input.into(), dst_orientation);
+            draw_connection(
+                ui.painter(),
+                src_pos,
+                src_control,
+                dst_pos,
+                dst_control,
+                connection_color,
+            );
         }
 
         /* Handle responses from drawing nodes */
@@ -437,12 +490,19 @@ where
     }
 }
 
-fn draw_connection(painter: &Painter, src_pos: Pos2, dst_pos: Pos2, color: Color32) {
+fn draw_connection(
+    painter: &Painter,
+    src_pos: Pos2,
+    src_control: Vec2,
+    dst_pos: Pos2,
+    dst_control: Vec2,
+    color: Color32,
+) {
     let connection_stroke = egui::Stroke { width: 5.0, color };
 
-    let control_scale = ((dst_pos.x - src_pos.x) / 2.0).max(30.0);
-    let src_control = src_pos + Vec2::X * control_scale;
-    let dst_control = dst_pos - Vec2::X * control_scale;
+    let control_scale = ((dst_pos.x - src_pos.x) / 2.0).abs().max(30.0);
+    let src_control = src_pos + src_control * control_scale;
+    let dst_control = dst_pos + dst_control * control_scale;
 
     let bezier = CubicBezierShape::from_points_stroke(
         [src_pos, src_control, dst_control, dst_pos],
@@ -565,12 +625,23 @@ where
                     self.graph,
                     user_state,
                 ));
+                ui.add_space(8.0); // The size of the little h-flip icon
+                ui.add_space(4.0); // margin
                 ui.add_space(8.0); // The size of the little cross icon
             });
             ui.add_space(margin.y);
             title_height = ui.min_size().y;
 
             // First pass: Draw the inner fields. Compute port heights
+            let input_layout = match self.orientation {
+                NodeOrientation::LeftToRight => Layout::left_to_right(Align::default()),
+                NodeOrientation::RightToLeft => Layout::right_to_left(Align::default()),
+            };
+            let output_layout = match self.orientation {
+                NodeOrientation::LeftToRight => Layout::right_to_left(Align::default()),
+                NodeOrientation::RightToLeft => Layout::left_to_right(Align::default()),
+            };
+
             let inputs = self.graph[self.node_id].inputs.clone();
             for (param_name, param_id) in inputs {
                 if self.graph[param_id].shown_inline {
@@ -584,27 +655,29 @@ where
                     // Default, but results in a totally safe alternative.
                     let mut value = std::mem::take(&mut self.graph[param_id].value);
 
-                    if self.graph.connection(param_id).is_some() {
-                        let node_responses = value.value_widget_connected(
-                            &param_name,
-                            self.node_id,
-                            ui,
-                            user_state,
-                            &self.graph[self.node_id].user_data,
-                        );
+                    ui.with_layout(input_layout, |ui| {
+                        if self.graph.connection(param_id).is_some() {
+                            let node_responses = value.value_widget_connected(
+                                &param_name,
+                                self.node_id,
+                                ui,
+                                user_state,
+                                &self.graph[self.node_id].user_data,
+                            );
 
-                        responses.extend(node_responses.into_iter().map(NodeResponse::User));
-                    } else {
-                        let node_responses = value.value_widget(
-                            &param_name,
-                            self.node_id,
-                            ui,
-                            user_state,
-                            &self.graph[self.node_id].user_data,
-                        );
+                            responses.extend(node_responses.into_iter().map(NodeResponse::User));
+                        } else {
+                            let node_responses = value.value_widget(
+                                &param_name,
+                                self.node_id,
+                                ui,
+                                user_state,
+                                &self.graph[self.node_id].user_data,
+                            );
 
-                        responses.extend(node_responses.into_iter().map(NodeResponse::User));
-                    }
+                            responses.extend(node_responses.into_iter().map(NodeResponse::User));
+                        }
+                    });
 
                     self.graph[self.node_id].user_data.separator(
                         ui,
@@ -624,12 +697,14 @@ where
             let outputs = self.graph[self.node_id].outputs.clone();
             for (param_name, param_id) in outputs {
                 let height_before = ui.min_rect().bottom();
-                responses.extend(
-                    self.graph[self.node_id]
-                        .user_data
-                        .output_ui(ui, self.node_id, self.graph, user_state, &param_name)
-                        .into_iter(),
-                );
+                ui.with_layout(output_layout, |ui| {
+                    responses.extend(
+                        self.graph[self.node_id]
+                            .user_data
+                            .output_ui(ui, self.node_id, self.graph, user_state, &param_name)
+                            .into_iter(),
+                    );
+                });
 
                 self.graph[self.node_id].user_data.separator(
                     ui,
@@ -757,13 +832,16 @@ where
             };
 
             if should_draw {
-                let pos_left = pos2(port_left, port_height);
+                let port_pos = match self.orientation {
+                    NodeOrientation::LeftToRight => pos2(port_left, port_height),
+                    NodeOrientation::RightToLeft => pos2(port_right, port_height),
+                };
                 draw_port(
                     ui,
                     self.graph,
                     self.node_id,
                     user_state,
-                    pos_left,
+                    port_pos,
                     &mut responses,
                     AnyParameterId::Input(*param),
                     self.port_locations,
@@ -779,13 +857,16 @@ where
             .iter()
             .zip(output_port_heights.into_iter())
         {
-            let pos_right = pos2(port_right, port_height);
+            let port_pos = match self.orientation {
+                NodeOrientation::LeftToRight => pos2(port_right, port_height),
+                NodeOrientation::RightToLeft => pos2(port_left, port_height),
+            };
             draw_port(
                 ui,
                 self.graph,
                 self.node_id,
                 user_state,
-                pos_right,
+                port_pos,
                 &mut responses,
                 AnyParameterId::Output(*param),
                 self.port_locations,
@@ -883,6 +964,10 @@ where
             user_state,
         );
 
+        if Self::flip_button(ui, outer_rect).clicked() {
+            *self.orientation = self.orientation.flip();
+        }
+
         if can_delete && Self::close_button(ui, outer_rect).clicked() {
             responses.push(NodeResponse::DeleteNodeUi(self.node_id));
         };
@@ -950,6 +1035,70 @@ where
             .line_segment([rect.left_top(), rect.right_bottom()], stroke);
         ui.painter()
             .line_segment([rect.right_top(), rect.left_bottom()], stroke);
+
+        resp
+    }
+
+    fn flip_button(ui: &mut Ui, node_rect: Rect) -> Response {
+        // Measurements
+        let margin = 8.0;
+        let size = 10.0;
+        let stroke_width = 2.0;
+        let offs = margin + size / 2.0;
+
+        let position = pos2(node_rect.right() - offs * 2.0 - 4.0, node_rect.top() + offs);
+        let rect = Rect::from_center_size(position, vec2(size, size));
+        let resp = ui.allocate_rect(rect, Sense::click());
+
+        let dark_mode = ui.visuals().dark_mode;
+        let color = if resp.clicked() {
+            if dark_mode {
+                color_from_hex("#ffffff").unwrap()
+            } else {
+                color_from_hex("#000000").unwrap()
+            }
+        } else if resp.hovered() {
+            if dark_mode {
+                color_from_hex("#dddddd").unwrap()
+            } else {
+                color_from_hex("#222222").unwrap()
+            }
+        } else {
+            #[allow(clippy::collapsible_else_if)]
+            if dark_mode {
+                color_from_hex("#aaaaaa").unwrap()
+            } else {
+                color_from_hex("#555555").unwrap()
+            }
+        };
+        let stroke = Stroke {
+            width: stroke_width,
+            color,
+        };
+
+        let lines = [
+            [rect.left_center(), rect.right_center()],
+            [
+                rect.left_center(),
+                rect.left_center().lerp(rect.center_top(), 0.5),
+            ],
+            [
+                rect.left_center(),
+                rect.left_center().lerp(rect.center_bottom(), 0.5),
+            ],
+            [
+                rect.right_center(),
+                rect.right_center().lerp(rect.center_top(), 0.5),
+            ],
+            [
+                rect.right_center(),
+                rect.right_center().lerp(rect.center_bottom(), 0.5),
+            ],
+        ];
+
+        for line in lines {
+            ui.painter().line_segment(line, stroke);
+        }
 
         resp
     }
