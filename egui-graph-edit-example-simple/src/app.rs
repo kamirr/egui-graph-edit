@@ -177,10 +177,14 @@ impl eframe::App for NodeGraphExampleSimple {
                             .add_node("Node".to_owned(), DummyNodeData, |_g, _id| {});
                     // Supplement z-order for the node (panic if missing)
                     self.state.node_order.push(id);
-                    // Position the node within editor area ((panic if missing)
+                    // Position the node within editor area (panic if missing)
                     self.state
                         .node_positions
                         .insert(id, egui::Pos2 { x: 20.0, y: 20.0 });
+                    // Orientation of the node (panic if missing)
+                    self.state
+                        .node_orientations
+                        .insert(id, NodeOrientation::LeftToRight);
                     // Fill in GUI within the node window, create inputs and outputs
                     DummyNodeTemplate.build_node(&mut self.state.graph, &mut self.user_state, id);
                     // Recalculate the line to display above the graph
