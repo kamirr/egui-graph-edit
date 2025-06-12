@@ -116,6 +116,71 @@ where
         user_state: &mut UserState,
         prepend_responses: Vec<NodeResponse<UserResponse, NodeData>>,
     ) -> GraphResponse<UserResponse, NodeData> {
+        ui.set_clip_rect(ui.max_rect());
+        let clip_rect = ui.clip_rect();
+        // Zoom may have never taken place, so ensure we use parent style
+        if !self.pan_zoom.started {
+            self.zoom(ui, 1.0);
+            self.pan_zoom.started = true;
+        }
+
+        // Zoom only within area where graph is shown
+        if ui.rect_contains_pointer(clip_rect) {
+            let scroll_delta = ui.input(|i| i.smooth_scroll_delta.y);
+            if scroll_delta != 0.0 {
+                let zoom_delta = (scroll_delta * 0.002).exp();
+                self.zoom(ui, zoom_delta);
+            }
+        }
+
+        // Render graph zoomed
+        let zoomed_style = self.pan_zoom.zoomed_style.clone();
+        let graph_response = show_zoomed(ui.style().clone(), zoomed_style, ui, |ui| {
+            self.draw_graph_editor_inside_zoom(ui, all_kinds, user_state, prepend_responses)
+        });
+
+        graph_response
+    }
+
+    /// Reset zoom to 1.0
+    pub fn reset_zoom(&mut self, ui: &Ui) {
+        let new_zoom = 1.0 / self.pan_zoom.zoom;
+        self.zoom(ui, new_zoom);
+    }
+
+    /// Zoom within the where you call `draw_graph_editor`. Use values like 1.01, or 0.99 to zoom.
+    /// For example: `let zoom_delta = (scroll_delta * 0.002).exp();`
+    pub fn zoom(&mut self, ui: &Ui, zoom_delta: f32) {
+        // Update zoom, and styles
+        let zoom_before = self.pan_zoom.zoom;
+        self.pan_zoom.zoom(ui.clip_rect(), ui.style(), zoom_delta);
+        if zoom_before != self.pan_zoom.zoom {
+            let actual_delta = self.pan_zoom.zoom / zoom_before;
+            self.update_node_positions_after_zoom(actual_delta);
+        }
+    }
+
+    fn update_node_positions_after_zoom(&mut self, zoom_delta: f32) {
+        // Update node positions, zoom towards center
+        let half_size = self.pan_zoom.clip_rect.size() / 2.0;
+        for (_id, node_pos) in self.node_positions.iter_mut() {
+            // 1. Get node local position (relative to origo)
+            let local_pos = node_pos.to_vec2() - half_size + self.pan_zoom.pan;
+            // 2. Scale local position by zoom delta
+            let scaled_local_pos = (local_pos * zoom_delta).to_pos2();
+            // 3. Transform back to global position
+            *node_pos = scaled_local_pos + half_size - self.pan_zoom.pan;
+            // This way we can retain pan untouched when zooming :)
+        }
+    }
+
+    fn draw_graph_editor_inside_zoom(
+        &mut self,
+        ui: &mut Ui,
+        all_kinds: impl NodeTemplateIter<Item = NodeTemplate>,
+        user_state: &mut UserState,
+        prepend_responses: Vec<NodeResponse<UserResponse, NodeData>>,
+    ) -> GraphResponse<UserResponse, NodeData> {
         // This causes the graph editor to use as much free space as it can.
         // (so for windows it will use up to the resizeably set limit
         // and for a Panel it will fill it completely)
@@ -125,7 +190,7 @@ where
         let cursor_pos = ui
             .ctx()
             .input(|i| i.pointer.hover_pos().unwrap_or(Pos2::ZERO));
-        let mut cursor_in_editor = resp.hovered();
+        let mut cursor_in_editor = resp.contains_pointer();
         let mut cursor_in_finder = false;
 
         // Gets filled with the node metrics as they are drawn
@@ -166,13 +231,10 @@ where
                 node_rects: &mut node_rects,
                 node_id,
                 ongoing_drag: self.connection_in_progress,
-                selected: self
-                    .selected_nodes
-                    .iter()
-                    .any(|selected| *selected == node_id),
+                selected: self.selected_nodes.contains(&node_id),
                 pan: self.pan_zoom.pan + editor_rect.min.to_vec2(),
             }
-            .show(ui, user_state);
+            .show(&self.pan_zoom, ui, user_state);
 
             // Actions executed later
             delayed_responses.extend(responses);
@@ -194,7 +256,9 @@ where
                     );
                     self.node_positions.insert(
                         new_node,
-                        cursor_pos - self.pan_zoom.pan - editor_rect.min.to_vec2(),
+                        node_finder.position.unwrap_or(cursor_pos)
+                            - self.pan_zoom.pan
+                            - editor_rect.min.to_vec2(),
                     );
                     self.node_orientations
                         .insert(new_node, NodeOrientation::LeftToRight);
@@ -310,6 +374,7 @@ where
                 ),
             };
             draw_connection(
+                &self.pan_zoom,
                 ui.painter(),
                 start_pos,
                 src_control,
@@ -334,6 +399,7 @@ where
             let src_control = port_control(&output.into(), src_orientation);
             let dst_control = port_control(&input.into(), dst_orientation);
             draw_connection(
+                &self.pan_zoom,
                 ui.painter(),
                 src_pos,
                 src_control,
@@ -491,6 +557,7 @@ where
 }
 
 fn draw_connection(
+    pan_zoom: &PanZoom,
     painter: &Painter,
     src_pos: Pos2,
     src_control: Vec2,
@@ -498,7 +565,10 @@ fn draw_connection(
     dst_control: Vec2,
     color: Color32,
 ) {
-    let connection_stroke = egui::Stroke { width: 5.0, color };
+    let connection_stroke = egui::Stroke {
+        width: 5.0 * pan_zoom.zoom,
+        color,
+    };
 
     let control_scale = ((dst_pos.x - src_pos.x) / 2.0).abs().max(30.0);
     let src_control = src_pos + src_control * control_scale;
@@ -550,6 +620,7 @@ where
 
     pub fn show(
         self,
+        pan_zoom: &PanZoom,
         ui: &mut Ui,
         user_state: &mut UserState,
     ) -> Vec<NodeResponse<UserResponse, NodeData>> {
@@ -563,17 +634,18 @@ where
                 .id_salt(self.node_id),
         );
 
-        Self::show_graph_node(self, &mut child_ui, user_state)
+        Self::show_graph_node(self, pan_zoom, &mut child_ui, user_state)
     }
 
     /// Draws this node. Also fills in the list of port locations with all of its ports.
     /// Returns responses indicating multiple events.
     fn show_graph_node(
         self,
+        pan_zoom: &PanZoom,
         ui: &mut Ui,
         user_state: &mut UserState,
     ) -> Vec<NodeResponse<UserResponse, NodeData>> {
-        let margin = egui::vec2(15.0, 5.0);
+        let margin = egui::vec2(15.0, 5.0) * pan_zoom.zoom;
         let mut responses = Vec::<NodeResponse<UserResponse, NodeData>>::new();
 
         let background_color;
@@ -586,14 +658,17 @@ where
             text_color = color_from_hex("#505050").unwrap();
         }
 
-        ui.visuals_mut().widgets.noninteractive.fg_stroke = Stroke::new(2.0, text_color);
+        ui.visuals_mut().widgets.noninteractive.fg_stroke =
+            Stroke::new(2.0 * pan_zoom.zoom, text_color);
 
         // Preallocate shapes to paint below contents
         let outline_shape = ui.painter().add(Shape::Noop);
         let background_shape = ui.painter().add(Shape::Noop);
 
-        let outer_rect_bounds = ui.available_rect_before_wrap();
-
+        let mut outer_rect_bounds = ui.available_rect_before_wrap();
+        // Scale hack, otherwise some (larger) rects expand too much when zoomed out
+        outer_rect_bounds.max.x =
+            outer_rect_bounds.min.x + outer_rect_bounds.width() * pan_zoom.zoom;
         let mut inner_rect = outer_rect_bounds.shrink2(margin);
 
         // Make sure we don't shrink to the negative:
@@ -640,9 +715,9 @@ where
                     self.graph,
                     user_state,
                 ));
-                ui.add_space(8.0); // The size of the little h-flip icon
-                ui.add_space(4.0); // margin
-                ui.add_space(8.0); // The size of the little cross icon
+                ui.add_space(8.0 * pan_zoom.zoom); // The size of the little h-flip icon
+                ui.add_space(4.0 * pan_zoom.zoom); // margin
+                ui.add_space(8.0 * pan_zoom.zoom); // The size of the little cross icon
             });
             ui.add_space(margin.y);
             title_height = ui.min_size().y;
@@ -694,6 +769,8 @@ where
                         }
                     });
 
+                    self.graph[param_id].value = value;
+
                     self.graph[self.node_id].user_data.separator(
                         ui,
                         self.node_id,
@@ -701,8 +778,6 @@ where
                         self.graph,
                         user_state,
                     );
-
-                    self.graph[param_id].value = value;
 
                     let height_after = ui.min_rect().bottom();
                     input_port_heights.push((height_before + height_after) / 2.0);
@@ -756,6 +831,7 @@ where
 
         #[allow(clippy::too_many_arguments)]
         fn draw_port<NodeData, DataType, ValueType, UserResponse, UserState>(
+            pan_zoom: &PanZoom,
             ui: &mut Ui,
             graph: &Graph<NodeData, DataType, ValueType>,
             node_id: NodeId,
@@ -775,7 +851,7 @@ where
 
             let port_rect = Rect::from_center_size(
                 port_pos,
-                egui::vec2(DISTANCE_TO_CONNECT * 2.0, DISTANCE_TO_CONNECT * 2.0),
+                egui::vec2(DISTANCE_TO_CONNECT * 2.0, DISTANCE_TO_CONNECT * 2.0) * pan_zoom.zoom,
             );
 
             let sense = if ongoing_drag.is_some() {
@@ -788,7 +864,7 @@ where
 
             // Check if the distance between the port and the mouse is the distance to connect
             let close_enough = if let Some(pointer_pos) = ui.ctx().pointer_hover_pos() {
-                port_rect.center().distance(pointer_pos) < DISTANCE_TO_CONNECT
+                port_rect.center().distance(pointer_pos) < DISTANCE_TO_CONNECT * pan_zoom.zoom
             } else {
                 false
             };
@@ -798,8 +874,12 @@ where
             } else {
                 port_type.data_type_color(user_state)
             };
-            ui.painter()
-                .circle(port_rect.center(), 5.0, port_color, Stroke::NONE);
+            ui.painter().circle(
+                port_rect.center(),
+                5.0 * pan_zoom.zoom,
+                port_color,
+                Stroke::NONE,
+            );
 
             if resp.drag_started() {
                 if is_connected_input {
@@ -855,6 +935,7 @@ where
                     NodeOrientation::RightToLeft => pos2(port_right, port_height),
                 };
                 draw_port(
+                    pan_zoom,
                     ui,
                     self.graph,
                     self.node_id,
@@ -880,6 +961,7 @@ where
                 NodeOrientation::RightToLeft => pos2(port_left, port_height),
             };
             draw_port(
+                pan_zoom,
                 ui,
                 self.graph,
                 self.node_id,
@@ -898,7 +980,7 @@ where
         // does not support drawing rectangles with asymmetrical round corners.
 
         let (shape, outline) = {
-            let rounding_radius = 4;
+            let rounding_radius = (4.0 * pan_zoom.zoom) as u8;
             let corner_radius = CornerRadius::same(rounding_radius);
 
             let titlebar_height = title_height + margin.y;
@@ -952,7 +1034,7 @@ where
             let outline = if self.selected {
                 Shape::Rect(RectShape {
                     blur_width: 0.0,
-                    rect: node_rect.expand(1.0),
+                    rect: node_rect.expand(1.0 * pan_zoom.zoom),
                     corner_radius,
                     fill: Color32::WHITE.lighten(0.8),
                     stroke: Stroke::NONE,
@@ -976,17 +1058,22 @@ where
         // --- Interaction ---
 
         // Titlebar buttons
+        let can_flip =
+            self.graph.nodes[self.node_id]
+                .user_data
+                .can_flip(self.node_id, self.graph, user_state);
+
+        if can_flip && Self::flip_button(pan_zoom, ui, outer_rect).clicked() {
+            *self.orientation = self.orientation.flip();
+        }
+
         let can_delete = self.graph.nodes[self.node_id].user_data.can_delete(
             self.node_id,
             self.graph,
             user_state,
         );
 
-        if Self::flip_button(ui, outer_rect).clicked() {
-            *self.orientation = self.orientation.flip();
-        }
-
-        if can_delete && Self::close_button(ui, outer_rect).clicked() {
+        if can_delete && Self::close_button(pan_zoom, ui, outer_rect).clicked() {
             responses.push(NodeResponse::DeleteNodeUi(self.node_id));
         };
 
@@ -1012,10 +1099,10 @@ where
         responses
     }
 
-    fn close_button(ui: &mut Ui, node_rect: Rect) -> Response {
+    fn close_button(pan_zoom: &PanZoom, ui: &mut Ui, node_rect: Rect) -> Response {
         // Measurements
-        let margin = 8.0;
-        let size = 10.0;
+        let margin = 8.0 * pan_zoom.zoom;
+        let size = 10.0 * pan_zoom.zoom;
         let stroke_width = 2.0;
         let offs = margin + size / 2.0;
 
@@ -1057,10 +1144,10 @@ where
         resp
     }
 
-    fn flip_button(ui: &mut Ui, node_rect: Rect) -> Response {
+    fn flip_button(pan_zoom: &PanZoom, ui: &mut Ui, node_rect: Rect) -> Response {
         // Measurements
-        let margin = 8.0;
-        let size = 10.0;
+        let margin = 8.0 * pan_zoom.zoom;
+        let size = 10.0 * pan_zoom.zoom;
         let stroke_width = 2.0;
         let offs = margin + size / 2.0;
 

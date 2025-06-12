@@ -184,6 +184,15 @@ where
     ) -> bool {
         true
     }
+
+    fn can_flip(
+        &self,
+        _node_id: NodeId,
+        _graph: &Graph<Self, Self::DataType, Self::ValueType>,
+        _user_state: &mut Self::UserState,
+    ) -> bool {
+        true
+    }
 }
 
 /// This trait can be implemented by any user type. The trait tells the library
