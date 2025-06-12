@@ -231,10 +231,7 @@ where
                 node_rects: &mut node_rects,
                 node_id,
                 ongoing_drag: self.connection_in_progress,
-                selected: self
-                    .selected_nodes
-                    .iter()
-                    .any(|selected| *selected == node_id),
+                selected: self.selected_nodes.contains(&node_id),
                 pan: self.pan_zoom.pan + editor_rect.min.to_vec2(),
             }
             .show(&self.pan_zoom, ui, user_state);
