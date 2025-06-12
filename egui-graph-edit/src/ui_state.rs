@@ -1,8 +1,8 @@
 use super::*;
-use std::marker::PhantomData;
-use egui::{Rect, Style, Ui, Vec2};
-use std::sync::Arc;
 use crate::scale::Scale;
+use egui::{Rect, Style, Ui, Vec2};
+use std::marker::PhantomData;
+use std::sync::Arc;
 
 #[cfg(feature = "persistence")]
 use serde::{Deserialize, Serialize};
@@ -61,7 +61,7 @@ impl<NodeData, DataType: PartialEq, ValueType, NodeKind, UserState>
 {
     pub fn new(default_zoom: f32) -> Self {
         Self {
-              pan_zoom: PanZoom::new(default_zoom),            
+            pan_zoom: PanZoom::new(default_zoom),
             ..Default::default()
         }
     }

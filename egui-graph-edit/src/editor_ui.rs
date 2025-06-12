@@ -259,9 +259,9 @@ where
                     );
                     self.node_positions.insert(
                         new_node,
-                        node_finder.position.unwrap_or(cursor_pos) 
-                        - self.pan_zoom.pan
-                        - editor_rect.min.to_vec2(),
+                        node_finder.position.unwrap_or(cursor_pos)
+                            - self.pan_zoom.pan
+                            - editor_rect.min.to_vec2(),
                     );
                     self.node_orientations
                         .insert(new_node, NodeOrientation::LeftToRight);
@@ -661,7 +661,8 @@ where
             text_color = color_from_hex("#505050").unwrap();
         }
 
-        ui.visuals_mut().widgets.noninteractive.fg_stroke = Stroke::new(2.0 * pan_zoom.zoom, text_color);
+        ui.visuals_mut().widgets.noninteractive.fg_stroke =
+            Stroke::new(2.0 * pan_zoom.zoom, text_color);
 
         // Preallocate shapes to paint below contents
         let outline_shape = ui.painter().add(Shape::Noop);
@@ -815,7 +816,7 @@ where
                 self.node_id,
                 self.graph,
                 user_state,
-            ));        
+            ));
         });
 
         // Second pass, iterate again to draw the ports. This happens outside
@@ -1060,11 +1061,10 @@ where
         // --- Interaction ---
 
         // Titlebar buttons
-        let can_flip = self.graph.nodes[self.node_id].user_data.can_flip(
-            self.node_id,
-            self.graph,
-            user_state,
-        );
+        let can_flip =
+            self.graph.nodes[self.node_id]
+                .user_data
+                .can_flip(self.node_id, self.graph, user_state);
 
         if can_flip && Self::flip_button(pan_zoom, ui, outer_rect).clicked() {
             *self.orientation = self.orientation.flip();
