@@ -106,5 +106,10 @@ impl Scale for Style {
         //self.visuals.window_rounding.scale(amount);
         self.visuals.window_shadow.scale(amount);
         self.visuals.popup_shadow.scale(amount);
+
+        // TODO: fix rect alignment
+        if amount != 1.0 {
+            self.debug.show_unaligned = false;
+        }
     }
 }
