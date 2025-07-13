@@ -8,7 +8,7 @@ license = "MIT"
 name = "egui-graph-edit"
 readme = "../README.md"
 repository = "https://github.com/kamirr/egui-graph-edit"
-version = "0.7.0"
+version = "0.7.1"
 workspace = ".."
 
 [features]
