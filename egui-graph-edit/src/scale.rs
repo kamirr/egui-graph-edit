@@ -108,6 +108,7 @@ impl Scale for Style {
         self.visuals.popup_shadow.scale(amount);
 
         // TODO: fix rect alignment
+        #[cfg(debug_assertions)]
         if amount != 1.0 {
             self.debug.show_unaligned = false;
         }

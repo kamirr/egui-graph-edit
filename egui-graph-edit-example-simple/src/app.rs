@@ -167,7 +167,7 @@ impl eframe::App for NodeGraphExampleSimple {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Add a panel with buttons
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 egui::widgets::global_theme_preference_switch(ui);
                 if ui.button("Create a node").clicked() {
                     // Add a node to the database inside egui-graph-edit.
