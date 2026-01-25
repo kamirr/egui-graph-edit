@@ -15,6 +15,7 @@ Prefix your commits appropriately:
 * `chore: ` for fixing clippy warnings or general cleanups with no change to behavior.
 * `fix: ` for bugfixes.
 * `feat: ` for new features. This includes adding new tests.
+
 If you're on the edge, choose whichever feels best. Consider splitting your change into separate commits if applicable and feasible.
 
 # Versioning
