@@ -1,5 +1,5 @@
 # Egui Graph Edit
-> Fork of [egui_node_graph](https://github.com/setzer22/egui_node_graph)
+> Fork of [egui_node_graph](https://crates.io/crates/egui-node-graph).
 
 [![Latest version](https://img.shields.io/crates/v/egui-graph-edit.svg)](https://crates.io/crates/egui-graph-edit)
 [![Documentation](https://docs.rs/egui-graph-edit/badge.svg)](https://docs.rs/egui-graph-edit)
