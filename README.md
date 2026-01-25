@@ -64,4 +64,4 @@ Are you using this crate for something cool? Add yourself to this section by
 sending a PR!
 
 ## Contributing 
-Contributions are welcome! Before writing a PR, please get in touch by filing an issue 😄
+Contributions are welcome. Refer to [CONTRIBUTING.md](./CONTRIBUTING.md) for contributing guidelines.
