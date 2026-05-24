@@ -49,7 +49,7 @@ where
             text_color = color_from_hex("#3f3f3f").unwrap();
         }
 
-        ui.visuals_mut().widgets.noninteractive.fg_stroke = Stroke::new(2.0, text_color);
+        ui.visuals_mut().widgets.noninteractive.fg_stroke = Stroke::new(2.0f32, text_color);
 
         let frame = Frame::dark_canvas(ui.style())
             .fill(background_color)
