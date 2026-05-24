@@ -493,7 +493,7 @@ where
                 selection_rect,
                 2.0,
                 bg_color,
-                Stroke::new(3.0, stroke_color),
+                Stroke::new(3.0f32, stroke_color),
                 StrokeKind::Outside,
             );
 
@@ -788,12 +788,13 @@ where
             for (param_name, param_id) in outputs {
                 let height_before = ui.min_rect().bottom();
                 ui.with_layout(output_layout, |ui| {
-                    responses.extend(
-                        self.graph[self.node_id]
-                            .user_data
-                            .output_ui(ui, self.node_id, self.graph, user_state, &param_name)
-                            .into_iter(),
-                    );
+                    responses.extend(self.graph[self.node_id].user_data.output_ui(
+                        ui,
+                        self.node_id,
+                        self.graph,
+                        user_state,
+                        &param_name,
+                    ));
                 });
 
                 self.graph[self.node_id].user_data.separator(
@@ -921,7 +922,7 @@ where
         for ((_, param), port_height) in self.graph[self.node_id]
             .inputs
             .iter()
-            .zip(input_port_heights.into_iter())
+            .zip(input_port_heights)
         {
             let should_draw = match self.graph[*param].kind() {
                 InputParamKind::ConnectionOnly => true,
@@ -954,7 +955,7 @@ where
         for ((_, param), port_height) in self.graph[self.node_id]
             .outputs
             .iter()
-            .zip(output_port_heights.into_iter())
+            .zip(output_port_heights)
         {
             let port_pos = match self.orientation {
                 NodeOrientation::LeftToRight => pos2(port_right, port_height),
@@ -998,6 +999,7 @@ where
                 stroke_kind: StrokeKind::Inside,
                 round_to_pixels: None,
                 brush: None,
+                angle: 0.0,
             });
 
             let body_rect = Rect::from_min_size(
@@ -1013,6 +1015,7 @@ where
                 stroke_kind: StrokeKind::Inside,
                 round_to_pixels: None,
                 brush: None,
+                angle: 0.0,
             });
 
             let bottom_body_rect = Rect::from_min_size(
@@ -1028,6 +1031,7 @@ where
                 stroke_kind: StrokeKind::Inside,
                 round_to_pixels: None,
                 brush: None,
+                angle: 0.0,
             });
 
             let node_rect = titlebar_rect.union(body_rect).union(bottom_body_rect);
@@ -1041,6 +1045,7 @@ where
                     stroke_kind: StrokeKind::Inside,
                     round_to_pixels: None,
                     brush: None,
+                    angle: 0.0,
                 })
             } else {
                 Shape::Noop

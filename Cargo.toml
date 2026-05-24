@@ -1,2 +1,7 @@
 [workspace]
-members = ["egui-graph-edit", "egui-graph-edit-example", "egui-graph-edit-example-simple"]
+resolver = "3"
+members = [
+    "egui-graph-edit",
+    "egui-graph-edit-example",
+    "egui-graph-edit-example-simple",
+]
