@@ -164,9 +164,9 @@ pub struct NodeGraphExampleSimple {
 }
 
 impl eframe::App for NodeGraphExampleSimple {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Add a panel with buttons
-        egui::TopBottomPanel::top("top").show(ctx, |ui| {
+        egui::Panel::top("top").show_inside(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 egui::widgets::global_theme_preference_switch(ui);
                 if ui.button("Create a node").clicked() {
@@ -193,12 +193,12 @@ impl eframe::App for NodeGraphExampleSimple {
             });
         });
         // Add a panel where textual representation of the graph will be displayed
-        egui::TopBottomPanel::top("result").show(ctx, |ui| {
+        egui::Panel::top("result").show_inside(ui, |ui| {
             ui.label(&self.cached_text_graph_description);
         });
 
         // Add main panel with the interactive graph
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             // Triger graph display and obtain user interaction events, if any.
             let ret = self.state.draw_graph_editor(
                 ui,

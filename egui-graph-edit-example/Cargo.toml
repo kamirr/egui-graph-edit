@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow = "1.0"
-eframe = "0.33"
+eframe = "0.34"
 egui-graph-edit = { path = "../egui-graph-edit" }
 serde = { version = "1.0", optional = true }
 

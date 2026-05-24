@@ -998,6 +998,7 @@ where
                 stroke_kind: StrokeKind::Inside,
                 round_to_pixels: None,
                 brush: None,
+                angle: 0.0,
             });
 
             let body_rect = Rect::from_min_size(
@@ -1013,6 +1014,7 @@ where
                 stroke_kind: StrokeKind::Inside,
                 round_to_pixels: None,
                 brush: None,
+                angle: 0.0,
             });
 
             let bottom_body_rect = Rect::from_min_size(
@@ -1028,6 +1030,7 @@ where
                 stroke_kind: StrokeKind::Inside,
                 round_to_pixels: None,
                 brush: None,
+                angle: 0.0,
             });
 
             let node_rect = titlebar_rect.union(body_rect).union(bottom_body_rect);
@@ -1041,6 +1044,7 @@ where
                     stroke_kind: StrokeKind::Inside,
                     round_to_pixels: None,
                     brush: None,
+                    angle: 0.0,
                 })
             } else {
                 Shape::Noop

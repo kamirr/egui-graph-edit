@@ -407,16 +407,17 @@ impl eframe::App for NodeGraphExample {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, PERSISTENCE_KEY, &self.state);
     }
+
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("top").show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::top("top").show_inside(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 egui::widgets::global_theme_preference_switch(ui);
             });
         });
         let graph_response = egui::CentralPanel::default()
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 self.state.draw_graph_editor(
                     ui,
                     AllMyNodeTemplates,
@@ -443,11 +444,11 @@ impl eframe::App for NodeGraphExample {
                     Ok(value) => format!("The result is: {:?}", value),
                     Err(err) => format!("Execution error: {}", err),
                 };
-                ctx.debug_painter().text(
+                ui.debug_painter().text(
                     egui::pos2(10.0, 35.0),
                     egui::Align2::LEFT_TOP,
                     text,
-                    TextStyle::Button.resolve(&ctx.style()),
+                    TextStyle::Button.resolve(&ui.style()),
                     egui::Color32::WHITE,
                 );
             } else {
