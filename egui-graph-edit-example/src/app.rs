@@ -448,7 +448,7 @@ impl eframe::App for NodeGraphExample {
                     egui::pos2(10.0, 35.0),
                     egui::Align2::LEFT_TOP,
                     text,
-                    TextStyle::Button.resolve(&ui.style()),
+                    TextStyle::Button.resolve(ui.style()),
                     egui::Color32::WHITE,
                 );
             } else {
