@@ -60,6 +60,8 @@ pub struct GraphResponse<UserResponse: UserResponseTrait, NodeData: NodeDataTrai
     pub cursor_in_editor: bool,
     /// Is the mouse currently hovering the node finder?
     pub cursor_in_finder: bool,
+    /// Geometry of the connections rendered during this frame.
+    pub connections: Vec<ConnectionRenderInfo>,
 }
 
 impl<UserResponse: UserResponseTrait, NodeData: NodeDataTrait> Default
@@ -70,8 +72,17 @@ impl<UserResponse: UserResponseTrait, NodeData: NodeDataTrait> Default
             node_responses: Default::default(),
             cursor_in_editor: false,
             cursor_in_finder: false,
+            connections: Default::default(),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct ConnectionRenderInfo {
+    pub output: OutputId,
+    pub input: InputId,
+    pub points: [Pos2; 4],
+    pub color: Color32,
 }
 
 pub struct GraphNodeWidget<'a, NodeData, DataType, ValueType> {
@@ -281,6 +292,8 @@ where
         }
 
         /* Draw connections */
+        let mut rendered_connections = Vec::new();
+
         fn port_control(param_id: &AnyParameterId, orientation: NodeOrientation) -> Vec2 {
             match (param_id, orientation) {
                 (AnyParameterId::Input(_), NodeOrientation::LeftToRight) => -Vec2::X,
@@ -398,7 +411,7 @@ where
             let dst_orientation = self.node_orientations[dst_id];
             let src_control = port_control(&output.into(), src_orientation);
             let dst_control = port_control(&input.into(), dst_orientation);
-            draw_connection(
+            let points = draw_connection(
                 &self.pan_zoom,
                 ui.painter(),
                 src_pos,
@@ -407,6 +420,12 @@ where
                 dst_control,
                 connection_color,
             );
+            rendered_connections.push(ConnectionRenderInfo {
+                output,
+                input,
+                points,
+                color: connection_color,
+            });
         }
 
         /* Handle responses from drawing nodes */
@@ -552,6 +571,7 @@ where
             node_responses: delayed_responses,
             cursor_in_editor,
             cursor_in_finder,
+            connections: rendered_connections,
         }
     }
 }
@@ -564,7 +584,7 @@ fn draw_connection(
     dst_pos: Pos2,
     dst_control: Vec2,
     color: Color32,
-) {
+) -> [Pos2; 4] {
     let connection_stroke = egui::Stroke {
         width: 5.0 * pan_zoom.zoom,
         color,
@@ -573,9 +593,10 @@ fn draw_connection(
     let control_scale = ((dst_pos.x - src_pos.x) / 2.0).abs().max(30.0);
     let src_control = src_pos + src_control * control_scale;
     let dst_control = dst_pos + dst_control * control_scale;
+    let points = [src_pos, src_control, dst_control, dst_pos];
 
     let bezier = CubicBezierShape::from_points_stroke(
-        [src_pos, src_control, dst_control, dst_pos],
+        points,
         false,
         Color32::TRANSPARENT,
         connection_stroke,
@@ -589,14 +610,11 @@ fn draw_connection(
         color: Color32::from_rgba_unmultiplied(r / 2, g / 2, b / 2, a / 2),
     };
 
-    let wide_bezier = CubicBezierShape::from_points_stroke(
-        [src_pos, src_control, dst_control, dst_pos],
-        false,
-        Color32::TRANSPARENT,
-        wide_stroke,
-    );
+    let wide_bezier =
+        CubicBezierShape::from_points_stroke(points, false, Color32::TRANSPARENT, wide_stroke);
 
     painter.add(wide_bezier);
+    points
 }
 
 #[derive(Clone, Copy, Debug)]
