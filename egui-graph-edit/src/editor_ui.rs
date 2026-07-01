@@ -1035,12 +1035,31 @@ where
             });
 
             let node_rect = titlebar_rect.union(body_rect).union(bottom_body_rect);
-            let outline = if self.selected {
+            let outline_color = self.graph[self.node_id].user_data.border_color(
+                ui,
+                self.node_id,
+                self.graph,
+                user_state,
+            );
+            let outline = if self.selected || outline_color.is_some() {
+                let (fill, width) = if self.selected {
+                    (Color32::WHITE.lighten(0.8), 1.0)
+                } else {
+                    (
+                        outline_color.unwrap(),
+                        self.graph[self.node_id].user_data.border_width(
+                            ui,
+                            self.node_id,
+                            self.graph,
+                            user_state,
+                        ),
+                    )
+                };
                 Shape::Rect(RectShape {
                     blur_width: 0.0,
-                    rect: node_rect.expand(1.0 * pan_zoom.zoom),
+                    rect: node_rect.expand(width.max(0.0) * pan_zoom.zoom),
                     corner_radius,
-                    fill: Color32::WHITE.lighten(0.8),
+                    fill,
                     stroke: Stroke::NONE,
                     stroke_kind: StrokeKind::Inside,
                     round_to_pixels: None,
