@@ -2,7 +2,7 @@
 authors = ["Kamil Koczurek <koczurekk@gmail.com>", "setzer22"]
 edition = "2021"
 name = "egui-graph-edit-example"
-rust-version = "1.56"
+rust-version = "1.92"
 version = "0.1.0"
 
 [lib]
