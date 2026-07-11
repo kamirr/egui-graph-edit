@@ -303,7 +303,8 @@ where
         /* Draw the node finder, if open */
         let mut should_close_node_finder = false;
         if let Some(ref mut node_finder) = self.node_finder {
-            let mut node_finder_area = Area::new(ui.id().with("node_finder")).order(Order::Foreground);
+            let mut node_finder_area =
+                Area::new(ui.id().with("node_finder")).order(Order::Foreground);
             if let Some(pos) = node_finder.position {
                 node_finder_area = node_finder_area.current_pos(pos);
             }
