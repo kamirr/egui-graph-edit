@@ -77,6 +77,20 @@ impl<UserResponse: UserResponseTrait, NodeData: NodeDataTrait> Default
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct GraphEditorOptions {
+    /// When false, the graph is rendered but mouse-driven graph interactions are ignored.
+    pub interactions_enabled: bool,
+}
+
+impl Default for GraphEditorOptions {
+    fn default() -> Self {
+        Self {
+            interactions_enabled: true,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ConnectionRenderInfo {
     pub output: OutputId,
@@ -127,6 +141,24 @@ where
         user_state: &mut UserState,
         prepend_responses: Vec<NodeResponse<UserResponse, NodeData>>,
     ) -> GraphResponse<UserResponse, NodeData> {
+        self.draw_graph_editor_with_options(
+            ui,
+            all_kinds,
+            user_state,
+            prepend_responses,
+            GraphEditorOptions::default(),
+        )
+    }
+
+    #[must_use]
+    pub fn draw_graph_editor_with_options(
+        &mut self,
+        ui: &mut Ui,
+        all_kinds: impl NodeTemplateIter<Item = NodeTemplate>,
+        user_state: &mut UserState,
+        prepend_responses: Vec<NodeResponse<UserResponse, NodeData>>,
+        options: GraphEditorOptions,
+    ) -> GraphResponse<UserResponse, NodeData> {
         ui.set_clip_rect(ui.max_rect());
         let clip_rect = ui.clip_rect();
         // Zoom may have never taken place, so ensure we use parent style
@@ -136,7 +168,7 @@ where
         }
 
         // Zoom only within area where graph is shown
-        if ui.rect_contains_pointer(clip_rect) {
+        if ui.rect_contains_pointer(clip_rect) && options.interactions_enabled {
             let scroll_delta = ui.input(|i| i.smooth_scroll_delta.y);
             if scroll_delta != 0.0 {
                 let zoom_delta = (scroll_delta * 0.002).exp();
@@ -147,7 +179,13 @@ where
         // Render graph zoomed
         let zoomed_style = self.pan_zoom.zoomed_style.clone();
         let graph_response = show_zoomed(ui.style().clone(), zoomed_style, ui, |ui| {
-            self.draw_graph_editor_inside_zoom(ui, all_kinds, user_state, prepend_responses)
+            self.draw_graph_editor_inside_zoom(
+                ui,
+                all_kinds,
+                user_state,
+                prepend_responses,
+                options,
+            )
         });
 
         graph_response
@@ -191,11 +229,13 @@ where
         all_kinds: impl NodeTemplateIter<Item = NodeTemplate>,
         user_state: &mut UserState,
         prepend_responses: Vec<NodeResponse<UserResponse, NodeData>>,
+        options: GraphEditorOptions,
     ) -> GraphResponse<UserResponse, NodeData> {
         // This causes the graph editor to use as much free space as it can.
         // (so for windows it will use up to the resizeably set limit
         // and for a Panel it will fill it completely)
         let editor_rect = ui.max_rect();
+        let interactions_enabled = options.interactions_enabled;
         let resp = ui.allocate_rect(editor_rect, Sense::hover());
 
         let cursor_pos = ui
@@ -225,11 +265,18 @@ where
 
         // Allocate rect before the nodes, otherwise this will block the interaction
         // with the nodes.
-        let r = ui.allocate_rect(ui.min_rect(), Sense::click().union(Sense::drag()));
-        if r.drag_started() {
-            drag_started_on_background = true;
-        } else if r.drag_stopped() {
-            drag_released_on_background = true;
+        let background_sense = if interactions_enabled {
+            Sense::click().union(Sense::drag())
+        } else {
+            Sense::hover()
+        };
+        let r = ui.allocate_rect(ui.min_rect(), background_sense);
+        if interactions_enabled {
+            if r.drag_started() {
+                drag_started_on_background = true;
+            } else if r.drag_stopped() {
+                drag_released_on_background = true;
+            }
         }
 
         /* Draw nodes */
@@ -247,8 +294,10 @@ where
             }
             .show(&self.pan_zoom, ui, user_state);
 
-            // Actions executed later
-            delayed_responses.extend(responses);
+            if interactions_enabled {
+                // Actions executed later
+                delayed_responses.extend(responses);
+            }
         }
 
         /* Draw the node finder, if open */
@@ -434,77 +483,80 @@ where
         // are stored here to report them back to the user.
         let mut extra_responses: Vec<NodeResponse<UserResponse, NodeData>> = Vec::new();
 
-        for response in delayed_responses.iter() {
-            match response {
-                NodeResponse::ConnectEventStarted(node_id, port) => {
-                    self.connection_in_progress = Some((*node_id, *port));
-                }
-                NodeResponse::ConnectEventEnded { input, output } => {
-                    self.graph.add_connection(*output, *input)
-                }
-                NodeResponse::CreatedNode(_) => {
-                    //Convenience NodeResponse for users
-                }
-                NodeResponse::SelectNode(node_id) => {
-                    self.selected_nodes = Vec::from([*node_id]);
-                }
-                NodeResponse::DeleteNodeUi(node_id) => {
-                    let (node, disc_events) = self.graph.remove_node(*node_id);
-                    // Pass the disconnection responses first so user code can perform cleanup
-                    // before node removal response.
-                    extra_responses.extend(
-                        disc_events
-                            .into_iter()
-                            .map(|(input, output)| NodeResponse::DisconnectEvent { input, output }),
-                    );
-                    // Pass the full node as a response so library users can
-                    // listen for it and get their user data.
-                    extra_responses.push(NodeResponse::DeleteNodeFull {
-                        node_id: *node_id,
-                        node,
-                    });
-                    self.node_positions.remove(*node_id);
-                    // Make sure to not leave references to old nodes hanging
-                    self.selected_nodes.retain(|id| *id != *node_id);
-                    self.node_order.retain(|id| *id != *node_id);
-                }
-                NodeResponse::DisconnectEvent { input, output } => {
-                    let other_node = self.graph.get_output(*output).node;
-                    self.graph.remove_connection(*input);
-                    self.connection_in_progress =
-                        Some((other_node, AnyParameterId::Output(*output)));
-                }
-                NodeResponse::RaiseNode(node_id) => {
-                    let old_pos = self
-                        .node_order
-                        .iter()
-                        .position(|id| *id == *node_id)
-                        .expect("Node to be raised should be in `node_order`");
-                    self.node_order.remove(old_pos);
-                    self.node_order.push(*node_id);
-                }
-                NodeResponse::MoveNode { node, drag_delta } => {
-                    self.node_positions[*node] += *drag_delta;
-                    // Handle multi-node selection movement
-                    if self.selected_nodes.contains(node) && self.selected_nodes.len() > 1 {
-                        for n in self.selected_nodes.iter().copied() {
-                            if n != *node {
-                                self.node_positions[n] += *drag_delta;
+        if interactions_enabled {
+            for response in delayed_responses.iter() {
+                match response {
+                    NodeResponse::ConnectEventStarted(node_id, port) => {
+                        self.connection_in_progress = Some((*node_id, *port));
+                    }
+                    NodeResponse::ConnectEventEnded { input, output } => {
+                        self.graph.add_connection(*output, *input)
+                    }
+                    NodeResponse::CreatedNode(_) => {
+                        //Convenience NodeResponse for users
+                    }
+                    NodeResponse::SelectNode(node_id) => {
+                        self.selected_nodes = Vec::from([*node_id]);
+                    }
+                    NodeResponse::DeleteNodeUi(node_id) => {
+                        let (node, disc_events) = self.graph.remove_node(*node_id);
+                        // Pass the disconnection responses first so user code can perform cleanup
+                        // before node removal response.
+                        extra_responses.extend(disc_events.into_iter().map(|(input, output)| {
+                            NodeResponse::DisconnectEvent { input, output }
+                        }));
+                        // Pass the full node as a response so library users can
+                        // listen for it and get their user data.
+                        extra_responses.push(NodeResponse::DeleteNodeFull {
+                            node_id: *node_id,
+                            node,
+                        });
+                        self.node_positions.remove(*node_id);
+                        // Make sure to not leave references to old nodes hanging
+                        self.selected_nodes.retain(|id| *id != *node_id);
+                        self.node_order.retain(|id| *id != *node_id);
+                    }
+                    NodeResponse::DisconnectEvent { input, output } => {
+                        let other_node = self.graph.get_output(*output).node;
+                        self.graph.remove_connection(*input);
+                        self.connection_in_progress =
+                            Some((other_node, AnyParameterId::Output(*output)));
+                    }
+                    NodeResponse::RaiseNode(node_id) => {
+                        let old_pos = self
+                            .node_order
+                            .iter()
+                            .position(|id| *id == *node_id)
+                            .expect("Node to be raised should be in `node_order`");
+                        self.node_order.remove(old_pos);
+                        self.node_order.push(*node_id);
+                    }
+                    NodeResponse::MoveNode { node, drag_delta } => {
+                        self.node_positions[*node] += *drag_delta;
+                        // Handle multi-node selection movement
+                        if self.selected_nodes.contains(node) && self.selected_nodes.len() > 1 {
+                            for n in self.selected_nodes.iter().copied() {
+                                if n != *node {
+                                    self.node_positions[n] += *drag_delta;
+                                }
                             }
                         }
                     }
-                }
-                NodeResponse::User(_) => {
-                    // These are handled by the user code.
-                }
-                NodeResponse::DeleteNodeFull { .. } => {
-                    unreachable!("The UI should never produce a DeleteNodeFull event.")
+                    NodeResponse::User(_) => {
+                        // These are handled by the user code.
+                    }
+                    NodeResponse::DeleteNodeFull { .. } => {
+                        unreachable!("The UI should never produce a DeleteNodeFull event.")
+                    }
                 }
             }
         }
 
         // Handle box selection
-        if let Some(box_start) = self.ongoing_box_selection {
+        if let Some(box_start) = interactions_enabled
+            .then_some(self.ongoing_box_selection)
+            .flatten()
+        {
             let selection_rect = Rect::from_two_pos(cursor_pos, box_start);
             let bg_color = Color32::from_rgba_unmultiplied(200, 200, 200, 20);
             let stroke_color = Color32::from_rgba_unmultiplied(200, 200, 200, 180);
@@ -538,32 +590,34 @@ where
         // This locks the context, so don't hold on to it for too long.
         let mouse = &ui.ctx().input(|i| i.pointer.clone());
 
-        if mouse.any_released() && self.connection_in_progress.is_some() {
-            self.connection_in_progress = None;
-        }
+        if interactions_enabled {
+            if mouse.any_released() && self.connection_in_progress.is_some() {
+                self.connection_in_progress = None;
+            }
 
-        if mouse.secondary_released() && !cursor_in_finder {
-            self.node_finder = Some(NodeFinder::new_at(cursor_pos));
+            if mouse.secondary_released() && !cursor_in_finder {
+                self.node_finder = Some(NodeFinder::new_at(cursor_pos));
+            }
         }
         if ui.ctx().input(|i| i.key_pressed(Key::Escape)) {
             self.node_finder = None;
         }
 
-        if r.dragged() && ui.ctx().input(|i| i.pointer.middle_down()) {
+        if interactions_enabled && r.dragged() && ui.ctx().input(|i| i.pointer.middle_down()) {
             self.pan_zoom.pan += ui.ctx().input(|i| i.pointer.delta());
         }
 
         // Deselect and deactivate finder if the editor backround is clicked,
         // *or* if the the mouse clicks off the ui
-        if mouse.any_pressed() && !cursor_in_finder {
+        if interactions_enabled && mouse.any_pressed() && !cursor_in_finder {
             self.selected_nodes = Vec::new();
             self.node_finder = None;
         }
 
-        if drag_started_on_background && mouse.primary_down() {
+        if interactions_enabled && drag_started_on_background && mouse.primary_down() {
             self.ongoing_box_selection = Some(cursor_pos);
         }
-        if mouse.primary_released() || drag_released_on_background {
+        if interactions_enabled && (mouse.primary_released() || drag_released_on_background) {
             self.ongoing_box_selection = None;
         }
 
