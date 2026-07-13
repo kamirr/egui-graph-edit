@@ -704,7 +704,7 @@ where
                     Self::MAX_NODE_SIZE.into(),
                 ))
                 .layout(*ui.layout())
-                .id_salt(self.node_id),
+                .id(ui.id().with(self.node_id)),
         );
 
         Self::show_graph_node(self, pan_zoom, &mut child_ui, user_state)
