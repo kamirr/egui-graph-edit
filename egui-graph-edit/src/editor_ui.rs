@@ -78,15 +78,24 @@ impl<UserResponse: UserResponseTrait, NodeData: NodeDataTrait> Default
 }
 
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub struct GraphEditorOptions {
     /// When false, the graph is rendered but mouse-driven graph interactions are ignored.
     pub interactions_enabled: bool,
+    /// Enable the built-in node finder.
+    ///
+    /// By default, a right-click on the editor area triggers a built-in node finder that
+    /// allows one to choose any node as per [`NodeTemplateIter`].
+    ///
+    /// If you wish to add a custom node-picking experience, set this to false.
+    pub node_finder_enabled: bool,
 }
 
 impl Default for GraphEditorOptions {
     fn default() -> Self {
         Self {
             interactions_enabled: true,
+            node_finder_enabled: true,
         }
     }
 }
@@ -596,7 +605,7 @@ where
                 self.connection_in_progress = None;
             }
 
-            if mouse.secondary_released() && !cursor_in_finder {
+            if mouse.secondary_released() && !cursor_in_finder && options.node_finder_enabled {
                 self.node_finder = Some(NodeFinder::new_at(cursor_pos));
             }
         }
